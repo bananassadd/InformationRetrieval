@@ -43,10 +43,10 @@ st.markdown("""
         margin-bottom: 2.85rem;
     }
     .search-title {
-        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-        font-size: 3.4rem !important;
-        font-weight: 600 !important;
-        letter-spacing: 0.04em !important;
+        font-family: 'Verdana', Geneva, Tahoma, sans-serif !important;
+        font-size: 3.25rem !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.03em !important;
         text-transform: uppercase !important;
         color: #111111 !important;
         margin-bottom: 0.45rem !important;
