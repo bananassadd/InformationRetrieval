@@ -7,7 +7,7 @@ from spellchecker import SpellChecker
 # Load the corpus 
 @st.cache_data
 def load_data():
-    return pd.read_csv("my_arxiv_corpus.csv").dropna(subset=['text'])
+    return pd.read_csv("our_arxiv_corpus.csv").dropna(subset=['text'])
 
 df = load_data()
 documents = df['text'].tolist()
