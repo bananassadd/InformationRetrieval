@@ -45,7 +45,7 @@ st.markdown("""
     .search-title {
         font-family: 'Verdana', Geneva, Tahoma, sans-serif !important;
         font-size: 3.25rem !important;
-        font-weight: 700 !important;
+        font-weight: 400 !important;
         letter-spacing: 0.03em !important;
         text-transform: uppercase !important;
         color: #111111 !important;
