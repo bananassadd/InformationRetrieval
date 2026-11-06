@@ -62,7 +62,8 @@ st.markdown("""
         letter-spacing: 0.02em !important;
     }
 
-    /* Popular Questions Section Heading */
+    /* Popular Topics Section Heading */
+    .popular-topics-label,
     .popular-questions-label {
         font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
         font-size: 0.78rem !important;
@@ -132,17 +133,12 @@ st.markdown("""
         font-weight: 400 !important;
     }
 
-    /* Train Station Ticker Row Container */
-    div[data-testid="stHorizontalBlock"]:has(.st-key-train_station) {
-        align-items: center !important;
-        margin-bottom: 0.9rem !important;
-    }
-
     /* Train Station Ticker Container */
     div.st-key-train_station {
         overflow: hidden !important;
         border-radius: 9999px !important;
         padding: 0.2rem 0 !important;
+        margin-bottom: 0.95rem !important;
         width: 100% !important;
         mask-image: linear-gradient(to right, transparent, black 4%, black 96%, transparent) !important;
         -webkit-mask-image: linear-gradient(to right, transparent, black 4%, black 96%, transparent) !important;
@@ -252,42 +248,6 @@ st.markdown("""
         border-color: #BD5575 !important;
         color: #FFFFFF !important;
         transform: translateY(-1px) !important;
-    }
-
-    /* Hidden Navigation Arrows (Only Visible on Hover) */
-    div.st-key-btn_prev_topic button,
-    div.st-key-btn_next_topic button {
-        opacity: 0 !important;
-        border-radius: 9999px !important;
-        width: 32px !important;
-        min-width: 32px !important;
-        height: 32px !important;
-        min-height: 32px !important;
-        padding: 0 !important;
-        background-color: #FFFFFF !important;
-        color: #BD5575 !important;
-        border: 1.5px solid #DD91A8 !important;
-        font-size: 1.25rem !important;
-        font-weight: 700 !important;
-        line-height: 1 !important;
-        box-shadow: 0 2px 8px rgba(189, 85, 117, 0.22) !important;
-        transition: opacity 0.25s ease, background-color 0.15s ease !important;
-        cursor: pointer !important;
-    }
-
-    /* Reveal arrows when hovering anywhere on the ticker row */
-    div[data-testid="stHorizontalBlock"]:has(.st-key-train_station):hover div.st-key-btn_prev_topic button,
-    div[data-testid="stHorizontalBlock"]:has(.st-key-train_station):hover div.st-key-btn_next_topic button,
-    div.st-key-btn_prev_topic button:hover,
-    div.st-key-btn_next_topic button:hover {
-        opacity: 1 !important;
-    }
-
-    div.st-key-btn_prev_topic button:hover,
-    div.st-key-btn_next_topic button:hover {
-        background-color: #DD91A8 !important;
-        color: #FFFFFF !important;
-        border-color: #BD5575 !important;
     }
 
     /* Results Header */
@@ -559,36 +519,19 @@ SUGGESTED_TOPICS = [
     ("Text Summarization", "Text Summarization"),
 ]
 
-if "topic_start" not in st.session_state:
-    st.session_state.topic_start = 0
-
 if not st.session_state.search_query:
-    st.markdown('<div class="popular-questions-label">Popular Questions</div>', unsafe_allow_html=True)
-    col_prev, col_train, col_next = st.columns([0.06, 0.88, 0.06], vertical_alignment="center")
-    
-    with col_prev:
-        if st.button("‹", key="btn_prev_topic"):
-            st.session_state.topic_start = (st.session_state.topic_start - 1) % len(SUGGESTED_TOPICS)
-            st.rerun()
-            
-    with col_next:
-        if st.button("›", key="btn_next_topic"):
-            st.session_state.topic_start = (st.session_state.topic_start + 1) % len(SUGGESTED_TOPICS)
-            st.rerun()
+    st.markdown('<div class="popular-topics-label">Popular Topics</div>', unsafe_allow_html=True)
 
-    # 5 suggested topics with full names
-    current_5 = [SUGGESTED_TOPICS[(st.session_state.topic_start + i) % len(SUGGESTED_TOPICS)] for i in range(len(SUGGESTED_TOPICS))]
-    # Duplicate for immediate seamless infinite marquee loop (0% to -50%)
-    ticker_topics = current_5 + current_5
+    # 2 sets of topics for continuous seamless automatic marquee loop (0% to -50%)
+    ticker_topics = SUGGESTED_TOPICS + SUGGESTED_TOPICS
 
-    with col_train:
-        with st.container(key="train_station"):
-            t_cols = st.columns(len(ticker_topics))
-            for idx, (t_label, t_q) in enumerate(ticker_topics):
-                with t_cols[idx]:
-                    if st.button(t_label, key=f"topic_btn_{idx}_{st.session_state.topic_start}"):
-                        set_query(t_q)
-                        st.rerun()
+    with st.container(key="train_station"):
+        t_cols = st.columns(len(ticker_topics))
+        for idx, (t_label, t_q) in enumerate(ticker_topics):
+            with t_cols[idx]:
+                if st.button(t_label, key=f"topic_btn_{idx}"):
+                    set_query(t_q)
+                    st.rerun()
 
 # Search Input Bar
 query_input = st.text_input(
