@@ -35,11 +35,13 @@ embeddings are then cached in `embeddings_cache_493.npy`.
 | File | Purpose |
 |---|---|
 | `app.py` | Streamlit GUI and search pipeline |
+| `style.css` | Custom UI styling and CSS animations for the web interface |
 | `search_utils.py` | query handling, fusion, snippets, highlighting (unit-tested) |
 | `test_search_utils.py` | tests for the query handling (`python test_search_utils.py`) |
 | `download_corpus.py` | collects papers from the arXiv API and extracts PDF text |
 | `clean_corpus.py` | cleans the raw download (see `docs/corpus_method.md`) |
-| `cleaned_arxiv_corpus.csv` | the final corpus (493 papers) |
+| `cleaned_arxiv_corpus.csv` | the final cleaned corpus (493 papers) |
 | `make_report.py`, `corpus_report.pdf` | corpus statistics report |
 | `docs/corpus_method.md` | exact queries, tier rule, cleaning steps |
+| `requirements.txt` | Python library dependencies |
 | `ai-logs/phase1/` | AI usage disclosure |
