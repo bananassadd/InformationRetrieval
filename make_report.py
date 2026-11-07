@@ -1,4 +1,4 @@
-"""Builds corpus_report.pdf from our_arxiv_corpus.csv.  Usage: python make_report.py  (needs reportlab, matplotlib)"""
+"""Builds corpus_report.pdf from cleaned_arxiv_corpus.csv.  Usage: python make_report.py  (needs reportlab, matplotlib)"""
 import pandas as pd, matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -8,8 +8,9 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, PageBreak
 
-df = pd.read_csv("our_arxiv_corpus.csv")
-df["words"] = df.text.str.split().str.len()
+df = pd.read_csv("cleaned_arxiv_corpus.csv")
+df["words"] = df['content'].str.split().str.len()
+df['year'] = df['arxiv_id'].astype(str).str.extract(r'^(\d{2})').astype(float) + 2000
 tiers = ["short", "medium", "long"]
 ct = df.groupby(["sub_topic", "length_category"]).size().unstack(fill_value=0)[tiers]
 ct["total"] = ct.sum(axis=1)
@@ -59,7 +60,7 @@ E += [Spacer(1, 4), tbl(q, [5.5*cm, 10.5*cm], left_cols=(0, 1)), Spacer(1, 4),
       Paragraph("<b>Date range:</b> no submission-date filter was applied, so the date range is whatever the relevance ranking returned. "
                 f"The papers span <b>{int(df.year.min())} to {int(df.year.max())}</b> (derived from the arXiv IDs); the data was downloaded in early November 2026. "
                 "Because relevance ranking on the live arXiv index can change over time, re-running the script later may return a slightly different set; "
-                "the exact papers are therefore stored in the committed dataset <font face='Courier'>our_arxiv_corpus.csv</font>.", B),
+                "the exact papers are therefore stored in the committed dataset <font face='Courier'>cleaned_arxiv_corpus.csv</font>.", B),
       Paragraph("<b>Length tiers</b> use the PDF page count (references and appendices included): short = 6 pages or fewer, medium = 7-9 pages, long = more than 9 pages. "
                 "The assignment leaves exactly 6 pages undefined; we placed 6-page papers in <i>short</i>.", B),
       Paragraph("3. Cleaning applied to the raw download", H2),

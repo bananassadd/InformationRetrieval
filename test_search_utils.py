@@ -4,8 +4,8 @@ from spellchecker import SpellChecker
 from rank_bm25 import BM25Okapi
 import search_utils as su
 
-df = pd.read_csv("our_arxiv_corpus.csv")
-docs = df.text.tolist()
+df = pd.read_csv("cleaned_arxiv_corpus.csv")
+docs = df['content'].tolist()
 vocab = su.build_vocab(docs)
 spell = SpellChecker()
 spell.word_frequency.load_words([w for w, c in vocab.items() if c >= su.MIN_COUNT])
