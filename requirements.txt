@@ -1,0 +1,11 @@
+streamlit
+pandas
+numpy
+rank_bm25
+sentence-transformers
+pyspellchecker
+arxiv
+PyMuPDF
+requests
+reportlab
+matplotlib

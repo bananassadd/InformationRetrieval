@@ -1,10 +1,15 @@
 import streamlit as st
 import pandas as pd
+import os
+import re
 import time
 import html
+import numpy as np
 from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer, util
 from spellchecker import SpellChecker
+import torch
+import search_utils as su
 
 # Page Configuration
 st.set_page_config(
@@ -299,6 +304,15 @@ st.markdown("""
         margin-bottom: 0.8rem;
     }
 
+    /* Highlighted query terms */
+    mark {
+        background-color: #FFD9E3;
+        color: #8C2D4A;
+        font-weight: 600;
+        padding: 0 2px;
+        border-radius: 3px;
+    }
+
     /* Metadata Badges */
     .badge-topic {
         display: inline-block;
@@ -445,55 +459,49 @@ st.markdown("""
 # Data Loading
 @st.cache_data
 def load_data():
-    df_raw = pd.read_csv("our_arxiv_corpus.csv").dropna(subset=['text'])
-    docs = df_raw['text'].tolist()
-    tts = df_raw['title'].tolist()
-    lks = df_raw['arxiv_id'].tolist()
-    subs = df_raw['sub_topic'].tolist() if 'sub_topic' in df_raw.columns else ['CS.CL'] * len(df_raw)
-    return df_raw, docs, tts, lks, subs
+    df_raw = pd.read_csv("our_arxiv_corpus.csv").dropna(subset=['text']).reset_index(drop=True)
+    return df_raw
 
-df, documents, titles, links, sub_topics = load_data()
+df = load_data()
+documents = df['text'].tolist()
+titles = df['title'].tolist()
+links = df['url'].tolist() if 'url' in df.columns else df['arxiv_id'].tolist()
+sub_topics = df['sub_topic'].tolist()
+
+def dense_text(i):
+    """Text the dense model reads: title + the start of the abstract (MiniLM only sees ~256 tokens anyway)."""
+    t = documents[i]
+    a = t.lower().find("abstract", 0, 4000)
+    body = t[a:a + 1500] if a != -1 else t[:1500]
+    return titles[i] + ". " + " ".join(body.split())
 
 # Model Loading
 @st.cache_resource
 def load_models():
-    tokenized_corpus = [doc.lower().split() for doc in documents]
-    bm25 = BM25Okapi(tokenized_corpus)
-    
-    model = SentenceTransformer('all-MiniLM-L6-v2')
-    doc_embeddings = model.encode(documents, convert_to_tensor=True, show_progress_bar=False)
-    return bm25, model, doc_embeddings
+    bm25 = BM25Okapi([su.tokenize(doc) for doc in documents])
+    docs_norm = [su.normalize(doc) for doc in documents]
+    vocab = su.build_vocab(documents)
 
-bm25, dense_model, doc_embeddings = load_models()
+    model = SentenceTransformer('all-MiniLM-L6-v2')
+    cache = f"embeddings_cache_{len(documents)}.npy"
+    if os.path.exists(cache):
+        emb = torch.tensor(np.load(cache))
+    else:
+        emb = model.encode([dense_text(i) for i in range(len(documents))],
+                           convert_to_tensor=True, show_progress_bar=False, normalize_embeddings=True)
+        np.save(cache, emb.cpu().numpy())
+    return bm25, model, emb, docs_norm, vocab
+
+bm25, dense_model, doc_embeddings, docs_norm, vocab = load_models()
 
 @st.cache_resource
 def load_spellchecker():
-    return SpellChecker()
+    sp = SpellChecker()
+    # teach it the corpus vocabulary so technical terms (LSTM, BLEU, ROUGE...) are never "corrected"
+    sp.word_frequency.load_words([w for w, c in vocab.items() if c >= su.MIN_COUNT])
+    return sp
 
 spell = load_spellchecker()
-
-abbreviations = {
-    "nlp": "natural language processing", 
-    "ml": "machine learning",
-    "mt": "machine translation",
-    "ner": "named entity recognition",
-    "qa": "question answering"
-}
-
-def clean_query(q):
-    q = q.lower() 
-    q = q.replace('"', '') 
-    
-    words = q.split()
-    processed_words = []
-    for w in words:
-        if w in abbreviations:
-            processed_words.extend(abbreviations[w].split()) 
-        else:
-            corrected = spell.correction(w) 
-            processed_words.append(corrected if corrected else w)
-            
-    return " ".join(processed_words)
 
 # Header Section
 st.markdown("""
@@ -543,12 +551,13 @@ query_input = st.text_input(
 )
 
 # Model Selection
+MODES = ["Hybrid (RRF)", "Hybrid (Weighted)", "BM25 (Keywords)", "Dense (Semantic)"]
 mode = st.pills(
     label="Model",
-    options=["Hybrid Fusion", "BM25 (Keywords)", "Dense (Semantic)"],
-    default="Hybrid Fusion",
+    options=MODES,
+    default="Hybrid (RRF)",
     label_visibility="collapsed"
-)
+) or "Hybrid (RRF)"          # clicking the active pill deselects it -> fall back to the default
 
 # Fixed top_k = 10
 top_k = 10
@@ -556,47 +565,74 @@ top_k = 10
 # Search Execution
 if query_input:
     t_start = time.time()
-    processed_q = clean_query(query_input)
-    
-    # BM25 Scores
-    bm25_scores = bm25.get_scores(processed_q.split())
-    
-    # Dense Scores
-    query_emb = dense_model.encode(processed_q, convert_to_tensor=True)
+    tokens, shown_q, corrections, expansions = su.clean_query(query_input, spell, vocab)
+    phrases = su.extract_phrases(query_input)
+
+    # BM25 scores
+    bm25_scores = list(bm25.get_scores(tokens))
+
+    # Dense scores (cosine similarity on normalised embeddings)
+    query_emb = dense_model.encode(" ".join(tokens), convert_to_tensor=True, normalize_embeddings=True)
     dense_scores = util.dot_score(query_emb, doc_embeddings)[0].cpu().tolist()
 
-    # Reciprocal Rank Fusion (RRF)
-    bm25_ranks = {idx: rank for rank, idx in enumerate(sorted(range(len(bm25_scores)), key=lambda i: bm25_scores[i], reverse=True))}
-    dense_ranks = {idx: rank for rank, idx in enumerate(sorted(range(len(dense_scores)), key=lambda i: dense_scores[i], reverse=True))}
-    
-    final_results = []
-    for i in range(len(documents)):
-        rrf_score = (1.0 / (60 + bm25_ranks[i])) + (1.0 / (60 + dense_ranks[i]))
-        final_results.append((i, rrf_score, bm25_scores[i], dense_scores[i]))
-        
-    if "Fusion" in mode:
-        results = sorted(final_results, key=lambda x: x[1], reverse=True)[:top_k]
-    elif "BM25" in mode:
-        results = sorted(final_results, key=lambda x: x[2], reverse=True)[:top_k]
-    else:
-        results = sorted(final_results, key=lambda x: x[3], reverse=True)[:top_k]
+    # Fusion
+    rrf_scores = su.rrf(bm25_scores, dense_scores, k=60)
+    weighted_scores = su.weighted(bm25_scores, dense_scores, alpha=0.5)
 
+    if mode.startswith("Hybrid (RRF)"):
+        main = rrf_scores
+    elif mode.startswith("Hybrid (Weighted)"):
+        main = weighted_scores
+    elif mode.startswith("BM25"):
+        main = bm25_scores
+    else:
+        main = dense_scores
+
+    # Phrase matching
+    #  - "quoted text" must appear exactly in the document (hard filter)
+    #  - an unquoted multi-word query gets a bonus when the whole phrase appears exactly
+    candidates = list(range(len(documents)))
+    phrase_note = ""
+    if phrases:
+        kept = [i for i in candidates if all(su.contains_phrase(docs_norm[i], p) for p in phrases)]
+        if kept:
+            candidates = kept
+            phrase_note = f" - exact phrase filter: {len(kept)} matching papers"
+        else:
+            phrase_note = " - no paper contains that exact phrase, showing normal results"
+    else:
+        whole = su.normalize(shown_q)
+        if len(whole.split()) > 1 and not mode.startswith("Dense"):
+            if mode.startswith("Hybrid (RRF)"):
+                bonus = 1 / 60
+            elif mode.startswith("Hybrid (Weighted)"):
+                bonus = 0.15
+            else:  # BM25
+                bonus = 0.25 * max(main) if max(main) > 0 else 0
+            main = [m + (bonus if su.contains_phrase(docs_norm[i], whole) else 0) for i, m in enumerate(main)]
+
+    ranked = sorted(candidates, key=lambda i: main[i], reverse=True)[:top_k]
     elapsed = time.time() - t_start
 
-    # Result Summary
-    expansion_note = f" (expanded to <i>{processed_q}</i>)" if processed_q != query_input.lower() else ""
+    # Result summary (shows what the query handling did)
+    notes = []
+    if expansions:
+        notes.append("expanded " + ", ".join(f"{a.upper()} → {b}" for a, b in expansions.items()))
+    if corrections:
+        notes.append("corrected " + ", ".join(f"{a} → {b}" for a, b in corrections.items()))
+    note_html = f" ({'; '.join(notes)})" if notes else ""
     st.markdown(f"""
     <div class="results-meta">
-        Showing top {len(results)} results in {elapsed:.2f}s for <b>"{query_input}"</b>{expansion_note}
+        Showing top {len(ranked)} results in {elapsed:.2f}s for <b>"{html.escape(query_input)}"</b>{html.escape(note_html)}{html.escape(phrase_note)}
     </div>
     """, unsafe_allow_html=True)
 
-    # Render Modern Cards
-    for rank, (doc_idx, rrf, b_score, d_score) in enumerate(results, 1):
-        title = titles[doc_idx]
+    # Render result cards
+    for rank, doc_idx in enumerate(ranked, 1):
+        title = html.escape(titles[doc_idx])
         link = links[doc_idx]
-        topic = sub_topics[doc_idx]
-        snippet = documents[doc_idx][:220].replace('\n', ' ').strip() + "..."
+        topic = html.escape(sub_topics[doc_idx])
+        snippet = su.highlight(su.make_snippet(documents[doc_idx], tokens + [w for p in phrases for w in p.split()]), tokens)
         full_text = documents[doc_idx].strip()
 
         st.markdown(f"""
@@ -608,9 +644,10 @@ if query_input:
             <div class="result-snippet">{snippet}</div>
             <div>
                 <span class="badge-topic">{topic}</span>
-                <span class="badge-score">Score: {rrf:.4f}</span>
-                <span class="badge-score">BM25: {b_score:.2f}</span>
-                <span class="badge-score">Dense: {d_score:.3f}</span>
+                <span class="badge-score">Score: {main[doc_idx]:.4f}</span>
+                <span class="badge-score">RRF: {rrf_scores[doc_idx]:.4f}</span>
+                <span class="badge-score">BM25: {bm25_scores[doc_idx]:.2f}</span>
+                <span class="badge-score">Dense: {dense_scores[doc_idx]:.3f}</span>
             </div>
         </div>
         """, unsafe_allow_html=True)

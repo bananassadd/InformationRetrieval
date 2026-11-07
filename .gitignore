@@ -1,5 +1,5 @@
 venv/
-
 __pycache__/
 *.pyc
 background.jpg
+embeddings_cache_*.npy
