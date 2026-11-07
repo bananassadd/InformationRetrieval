@@ -27,7 +27,7 @@ for topic_name, search_query in topics.items():
     search = arxiv.Search(
         query = search_query,
         max_results = 100,
-        sort_by = arxiv.SortCriterion.Relevance 
+        sort_by = arxiv.SortCriterion.Relevance
     )
 
     for paper in client.results(search):
@@ -56,11 +56,10 @@ for topic_name, search_query in topics.items():
             document_info = {
                 "title": paper.title,
                 "arxiv_id": paper.entry_id,
-                "sub_topic": paper.primary_category,
+                "sub_topic": topic_name,
                 "content": full_text,
                 "length_category": length_category,
-                "page_count": page_count,
-                "text": full_text
+                "page_count": page_count
             }
 
             corpus_data.append(document_info)
